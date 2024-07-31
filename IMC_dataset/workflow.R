@@ -46,6 +46,8 @@ system("./segmentation.sh")
 # Cell matching
 
 cells<-readRDS('paper_cells.rds')
+spe<-  read_steinbock("steinbock", image_file = "metadata.csv", panel_file = "panel.csv", extract_imagemetadata_from = c("case", "slide", "part",	"group",	"stage"))
+
 spe$match<-NA
 for(im in unique(spe$sample_id)) {
   dist_matrix<-proxy::dist(spatialCoords(spe[,spe$sample_id==im])%>%as.data.frame, cells[cells$ImageNumber==im, c('Location_Center_X', 'Location_Center_Y')]%>%as.data.frame(), method='euclidean')
@@ -68,7 +70,6 @@ spe$CellType[!is.na(spe$match)]<-cells$CellType[spe$match[!is.na(spe$match)]]
 
 #  Scaling
 
-spe<-  read_steinbock("steinbock", image_file = "metadata.csv", panel_file = "panel.csv", extract_imagemetadata_from = c("case", "slide", "part",	"group",	"stage"))
 assay(spe, 'asinh', withDimnames=FALSE)<- asinh(counts(spe)/3)
 assay(spe, 'exprs', withDimnames=FALSE)<- t(scale(t(assay(spe, 'asinh')), center= rowMins(assay(spe, 'asinh')), scale=rowMaxs(assay(spe, 'asinh'))-rowMins(assay(spe, 'asinh'))))
 

@@ -1,4 +1,6 @@
-pacman::p_load(SpatialExperiment, cowplot, tidyverse, caret, cvms, ggimage, ggrepel, ROCR, rstatix)
+pacman::p_load(SpatialExperiment, cowplot, tidyverse, caret, cvms, ggimage, ggrepel,
+               ROCR, rstatix, dittoSeq, scater, corrplot, RColorBrewer, viridis, 
+               ggpubr, SCORPIUS)
 
 # Co-expression analysis
 co_exp_matrix<-read.csv('data/co_exp_matrix.csv', row.names=1, check.names=F)
@@ -50,7 +52,7 @@ p<-dittoDimPlot(spe_mini,
                 size = 0.2,
                 labels.size =10, 
                 legend.size = 20,
-                do.label = TRUE,
+                do.label = F,
                 legend.show=TRUE) +
   ggtitle("Neural Network")+
   theme(plot.title = element_text(size = 40), legend.title = element_text('Cell Type'), legend.text = element_text(size = 30), axis.title.x=element_text(size=30), axis.title.y=element_text(size=30))
@@ -59,9 +61,9 @@ q<-dittoDimPlot(spe_mini,
                 reduction.use = "UMAP", 
                 size = 0.2,
                 labels.size =10, 
-                do.label = TRUE,
+                do.label = F,
                 legend.show=FALSE) +
-  ggtitle("Ilastik (Damond et al., 2009)")+
+  ggtitle("Ilastik (Damond et al., 2019)")+
   theme(plot.title = element_text(size = 40), axis.title.x=element_text(size=30), axis.title.y=element_text(size=30))
 plot_grid(q,p, rel_widths = c(1, 1.2), scale = 0.9)
 dev.off()
@@ -88,7 +90,7 @@ dittoHeatmap(celltype_mean,
              annot.by = c('cell_type', 'cell_category'),
              annotation_colors = list(cell_category= setNames(c("#009E73", "#E69F00", "#56B4E9", "#F0E442", "#0072B2"), c('islet', 'exocrine','immune','stromal','unknown')),
                                       cell_type=setNames(c("#6A3D9A", "#FF7F00", "skyblue2",  "palegreen2","#CAB2D6", "steelblue4","#FDBF6F",
-                                                           "darkorange4", "gray70", "gold","darkturquoise", "beige", "royalblue","pink"), cell_types ))
+                                                           "darkorange4", "gray70", "gold","darkturquoise", "beige","red3", "royalblue","pink"), cell_types ))
              )
 dev.off()
  
@@ -126,6 +128,18 @@ plot_grid(b, a, align='hv', scale=.9)
 dev.off()
 
 df <- read.csv('data/reconstruction_pairs.csv', row.names=1)
+cor(df$f1, df$co_exp_rate)
+cor(df$f1, df$diff_noise)
+cor(df$f1, df$diff_sig)
+cor(df$f1, df$snr)
+cor(df$f1, df$freq)
+
+cor(df$corr, df$co_exp_rate)
+cor(df$corr, df$diff_noise)
+cor(df$corr, df$diff_sig)
+cor(df$corr, df$snr)
+cor(df$corr, df$freq)
+
 df$co_exp_rate_bin <- ifelse(df$co_exp_rate <=.05, '<= 0.05', '> 0.05')
 t.test(df$f1~df$co_exp_rate_bin)
 t.test(df$corr~df$co_exp_rate_bin)
@@ -168,13 +182,14 @@ image_mean <- aggregateAcrossCells(as(spe[,spe$cell_category=='islet'], "SingleC
                                    use.assay.type = "exprs")
 image_mean <- image_mean[,image_mean$part!='Head'] 
 
-image_means<-as.data.frame(t(assay(image_mean, 'exprs')))
+endocrine_markers <- c("SYP", "CD99", "SLC2A1", "PTPRN", "GCG", "PCSK2", "INS", "PIN", "NKX6-1", "IAPP", "PDX1", "SST", "PPY")
+image_means<-as.data.frame(t(assay(image_mean, 'exprs')[endocrine_markers,]))
 
 set.seed(30)
 space <- reduce_dimensionality(as.matrix(image_means), "pearson")
 
 traj <- infer_trajectory(space)
-traj$time<-1-traj$time
+# traj$time<-1-traj$time
 
 image_mean$pseudotime<-traj$time
 
@@ -182,9 +197,10 @@ saveRDS(image_mean, 'data/image_means_uncompressed.rds' )
 
 pdf('plots/markers_islets_uncompressed.pdf')
 dittoHeatmap(image_mean,
-             genes=c("GCG", "PCSK2", "INS", "PIN", "NKX6-1", "IAPP", "PDX1", "SST", "PPY"),
+             genes=endocrine_markers,
              assay = "exprs", 
              cluster_cols = F, 
+             cluster_rows = F,
              order.by = "pseudotime",
              scaled.to.max = T,
              heatmap.colors.max.scaled = plasma(100),
@@ -201,17 +217,43 @@ image_mean_decompr <- aggregateAcrossCells(as(spe_6[,spe_6$cell_category=='islet
                                    use.assay.type = "exprs")
 image_mean_decompr <- image_mean_decompr[,image_mean_decompr$part!='Head'] 
 
-image_means<-as.data.frame(t(assay(image_mean_decompr, 'exprs')))
+image_means<-as.data.frame(t(assay(image_mean_decompr, 'exprs')[endocrine_markers,]))
 
 set.seed(30)
 space <- reduce_dimensionality(as.matrix(image_means), "pearson")
 
 traj <- infer_trajectory(space)
-traj$time<-1-traj$time
+# traj$time<-1-traj$time
 
 image_mean_decompr$pseudotime<-traj$time
 
 saveRDS(image_mean_decompr, 'data/image_means_compressed.rds' )
+
+pdf('plots/markers_islets_compressed.pdf')
+dittoHeatmap(image_mean_decompr,
+             genes=endocrine_markers,
+             assay = "exprs", 
+             cluster_cols = F,
+             cluster_rows = F,
+             order.by = "pseudotime",
+             scaled.to.max = T,
+             heatmap.colors.max.scaled = plasma(100),
+             annot.by = c("pseudotime", "stage"),
+             annotation_colors = list(stage= setNames(c("skyblue2", "#6A3D9A", "#FF7F00"), c('Non-diabetic', 'Onset', 'Long-duration'))))
+dev.off()
+
+cor(image_mean$pseudotime, image_mean_decompr$pseudotime)
+
+png('plots/pseudotime.png', height=500, width=625)
+ggplot(data.frame(pt_uncomp = image_mean$pseudotime, pt_comp = image_mean_decompr$pseudotime, stage = image_mean$stage) ,
+       aes(x = pt_uncomp, y= pt_comp, color  = stage))+
+  geom_point()+
+  scale_color_manual(name='Stage', values=c("skyblue2", "#6A3D9A", "#FF7F00"))+
+  xlab('Pseudotime (without compression)')+
+  ylab('Pseudotime (with compression)')+
+  theme(text=element_text(size=15))+
+  guides(color = guide_legend(override.aes = list(size = 5)))
+dev.off()
 
 df<- cbind(t(assay(image_mean_decompr, 'exprs')[c('PIN', 'INS', 'IAPP', 'NKX6-1'),]), as.character(image_mean_decompr$stage))
 df<-as.data.frame(df)
@@ -256,32 +298,6 @@ g4<-ggplot(df, aes(y=NKX6.1, x=stage))+
 pdf('plots/boxplots_markers.pdf')
 plot_grid(g1, g2, g3, g4, nrow=2)
 dev.off()
-
-pdf('plots/markers_islets_compressed.pdf')
-dittoHeatmap(image_mean_decompr,
-             genes=unique(list_c(cell_types[cat_type_map[['islet']]])),
-             assay = "exprs", 
-             cluster_cols = F, 
-             order.by = "pseudotime",
-             scaled.to.max = T,
-             heatmap.colors.max.scaled = plasma(100),
-             annot.by = c("pseudotime", "stage"),
-             annotation_colors = list(stage= setNames(c("skyblue2", "#6A3D9A", "#FF7F00"), c('Non-diabetic', 'Onset', 'Long-duration'))))
-dev.off()
-
-cor(image_mean$pseudotime, image_mean_decompr$pseudotime)
-
-png('plots/pseudotime.png', height=500, width=625)
-ggplot(data.frame(pt_uncomp = image_mean$pseudotime, pt_comp = image_mean_decompr$pseudotime, stage = image_mean$stage) ,
-       aes(x = pt_uncomp, y= pt_comp, color  = stage))+
-  geom_point()+
-  scale_color_manual(name='Stage', values=c("skyblue2", "#6A3D9A", "#FF7F00"))+
-  xlab('Pseudotime (without compression)')+
-  ylab('Pseudotime (with compression)')+
-  theme(text=element_text(size=15))+
-  guides(color = guide_legend(override.aes = list(size = 5)))
-dev.off()
-
 
 spe$stage<-factor(spe$stage, levels=c('Non-diabetic', 'Onset', 'Long-duration'))
 spe_6$stage<-factor(spe_6$stage, levels=c('Non-diabetic', 'Onset', 'Long-duration'))
@@ -367,7 +383,7 @@ row1 <- plot_grid(p1, q1, rel_widths = c(3,2), scale = 0.9)
 
 title1 <- ggdraw() + 
   draw_label(
-    "Damond et al., 2009",
+    "Damond et al., 2019",
     fontface = 'bold', x=.01, hjust=0
   )
 
@@ -402,31 +418,32 @@ png('plots/downstream_effects.png', width=650, height=500)
 plot_grid(grid, legend, ncol=1, rel_heights = c(4,.5))
 dev.off()
 
-tbl_2009<-table(spe$CellType[spe$CellCat=='islet'], spe$stage[spe$CellCat=='islet'])
+tbl_paper<-table(spe$CellType[spe$CellCat=='islet'], spe$stage[spe$CellCat=='islet'])
 tbl<-table(spe$cell_type[spe$cell_category=='islet'], spe$stage[spe$cell_category=='islet'])
 tbl_decompr<-table(spe_6$cell_type[spe$cell_category=='islet'], spe$stage[spe$cell_category=='islet'])
 
-tbl_2009<-scale(tbl_2009, center=F, scale=colSums(tbl_2009))
+tbl_paper<-scale(tbl_paper, center=F, scale=colSums(tbl_paper))
 tbl<-scale(tbl, center=F, scale=colSums(tbl))
 tbl_decompr<-scale(tbl_decompr, center=F, scale=colSums(tbl_decompr))
 
-tbl['beta', 'Non-diabetic'] - tbl['beta', 'Onset']
-tbl_decompr['beta', 'Non-diabetic'] - tbl_decompr['beta', 'Onset']
+(tbl_paper['beta', 'Non-diabetic'] - tbl_paper['beta', 'Onset'])/tbl_paper['beta', 'Non-diabetic']
+(tbl['beta', 'Non-diabetic'] - tbl['beta', 'Onset'])/tbl['beta', 'Non-diabetic']
+(tbl_decompr['beta', 'Non-diabetic'] - tbl_decompr['beta', 'Onset'])/tbl_decompr['beta', 'Non-diabetic']
 
-t.test(tbl_2009['alpha',], tbl['alpha',], paired=T)
-t.test(tbl_2009['beta',], tbl['beta',], paired=T)
-t.test(tbl_2009['delta',], tbl['delta',], paired=T)
-t.test(tbl_2009['gamma',], tbl['gamma',], paired=T)
+t.test(tbl_paper['alpha',], tbl['alpha',], paired=T)
+t.test(tbl_paper['beta',], tbl['beta',], paired=T)
+t.test(tbl_paper['delta',], tbl['delta',], paired=T)
+t.test(tbl_paper['gamma',], tbl['gamma',], paired=T)
 
 t.test(tbl_decompr['alpha',], tbl['alpha',], paired=T)
 t.test(tbl_decompr['beta',], tbl['beta',], paired=T)
 t.test(tbl_decompr['delta',], tbl['delta',], paired=T)
 t.test(tbl_decompr['gamma',], tbl['gamma',], paired=T)
 
-tbl_2009<-table(spe$CellType[spe$CellCat=='immune'], spe$stage[spe$CellCat=='immune'])
+tbl_paper<-table(spe$CellType[spe$CellCat=='immune'], spe$stage[spe$CellCat=='immune'])
 tbl<-table(spe$cell_type[spe$cell_category=='immune'], spe$stage[spe$cell_category=='immune'])
 tbl_decompr<-table(spe_6$cell_type[spe$cell_category=='immune'], spe$stage[spe$cell_category=='immune'])
 
-(tbl_2009<-t(scale(t(tbl_2009), center=F, scale=rowSums(tbl_2009))))
+(tbl_paper<-t(scale(t(tbl_paper), center=F, scale=rowSums(tbl_paper))))
 (tbl<-t(scale(t(tbl), center=F, scale=rowSums(tbl))))
 (tbl_decompr<-t(scale(t(tbl_decompr), center=F, scale=rowSums(tbl_decompr))))
